@@ -1,0 +1,7 @@
+
+*.ibc
+*.out
+
+.atom-build.yaml
+
+.DS_Store

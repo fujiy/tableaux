@@ -1,0 +1,9 @@
+package tableau
+
+pkgs = lightyear, wlpprint
+
+modules    = Main, Tableau
+main       = Main
+executable = tableau.out
+
+opts = "--color"
