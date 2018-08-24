@@ -2,8 +2,10 @@ package tableau
 
 pkgs = lightyear, wlpprint
 
-modules    = Main, Tableau
+modules    = Main, Tableau.Test
 main       = Main
 executable = tableau.out
+
+tests = Tableau.Test.testVailed
 
 opts = "--color"
