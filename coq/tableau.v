@@ -9,7 +9,10 @@ Inductive form : Set :=
   | Neg  : form -> form
   | Conj : form -> form -> form
   | Disj : form -> form -> form
-  | Impl : form -> form -> form.
+  | Impl : form -> form -> form
+  | Equi : form -> form -> form.
+ (* | Forall : (nat -> form) -> form 
+  | Exists : (nat -> form) -> form.*)
 
 (*
 Definition foo (f : form) : nat :=
@@ -27,6 +30,7 @@ Fixpoint form_size (f : form) : nat :=
     | Conj a b => 2 + form_size a + form_size b
     | Disj a b => 2 + form_size a + form_size b
     | Impl a b => 2 + form_size a + form_size b
+    | Equi a b => 3 + form_size a + form_size b
   end.
 
 Lemma form_size_gt0 : forall (f : form),
@@ -36,6 +40,9 @@ Lemma form_size_gt0 : forall (f : form),
   induction f.
     compute.
     apply le_n.
+
+    unfold form_size.
+    apply gt_Sn_O.
 
     unfold form_size.
     apply gt_Sn_O.
@@ -158,6 +165,12 @@ Function step (tl : list nat) (fl : list nat) (l : list form) {measure forms_siz
               (step tl fl (b :: l'))
           | Neg (Impl a b) =>
               step tl fl (a :: Neg b :: l')
+          | Equi a b => orb
+              (step tl fl (a :: b :: l'))
+              (step tl fl (Neg a :: Neg b :: l'))
+          | Neg (Equi a b) => orb
+              (step tl fl (Neg a :: b :: l'))
+              (step tl fl (a :: Neg b :: l'))
         end
   end.
 
@@ -233,6 +246,32 @@ Function step (tl : list nat) (fl : list nat) (l : list form) {measure forms_siz
   rewrite forms_size_head.
   apply plus_lt_compat_r.
   unfold form_size.
+  rewrite Nat.add_shuffle3.
+  apply plus_lt_compat_l.
+  rewrite <- Nat.add_assoc.
+  apply lt_plus_l.
+  apply Nat.lt_0_succ.
+
+  intros.
+  rewrite forms_size_head.
+  rewrite forms_size_head.
+  rewrite <- plus_assoc_reverse.
+  rewrite forms_size_head.
+  apply plus_lt_compat_r.
+  unfold form_size.
+  rewrite <- Nat.add_assoc.
+  apply plus_lt_compat_l.
+  rewrite <- Nat.add_assoc.
+  apply lt_plus_l.
+  apply Nat.lt_0_succ.
+
+  intros.
+  rewrite forms_size_head.
+  rewrite forms_size_head.
+  rewrite <- plus_assoc_reverse.
+  rewrite forms_size_head.
+  apply plus_lt_compat_r.
+  unfold form_size.
   rewrite <- Nat.add_assoc.
   apply lt_plus_l.
   apply Nat.lt_0_2.
@@ -273,6 +312,32 @@ Function step (tl : list nat) (fl : list nat) (l : list form) {measure forms_siz
 
     apply lt_plus_r.
     apply form_size_gt0.
+
+  intros.
+  rewrite forms_size_head.
+  rewrite forms_size_head.
+  rewrite <- plus_assoc_reverse.
+  rewrite forms_size_head.
+  apply plus_lt_compat_r.
+  unfold form_size.
+  rewrite <- Nat.add_shuffle3.
+  rewrite <- Nat.add_assoc.
+  rewrite <- Nat.add_assoc.
+  rewrite Nat.add_assoc.
+  apply plus_lt_compat_r.
+  compute.
+  apply le_n.
+
+  intros.
+  rewrite forms_size_head.
+  rewrite forms_size_head.
+  rewrite <- plus_assoc_reverse.
+  rewrite forms_size_head.
+  apply plus_lt_compat_r.
+  unfold form_size.
+  rewrite <- Nat.add_assoc.
+  apply lt_plus_l.
+  apply Nat.lt_0_succ.
 
 Defined.
 
