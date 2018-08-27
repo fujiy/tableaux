@@ -24,6 +24,19 @@ data Form = Atom Name (List Term)
           | Forall Name (Name -> Form)
           | Exists Name (Name -> Form)
 
+eqs : List Term -> List Term -> Bool
+
+public export
+Eq Term where
+    (Var x)    == (Var y)    = x == y
+    (Fun x xs) == (Fun y ys) = x == y && eqs xs ys
+    _          == _          = False
+
+eqs []      []      = True
+eqs []      _       = False
+eqs _       []       = False
+eqs (x::xs) (y::ys) = x == y && eqs xs ys
+
 pform : Form -> Doc
 
 ptl : List Term -> List Doc
@@ -45,13 +58,13 @@ Pretty Form where
     pretty (Disj a b)   = pform a |++| text "∨" |++| pform b
     pretty (Impl a b)   = pform a |++| text "→" |++| pform b
     pretty (Equi a b)   = pform a |++| text "↔" |++| pform b
-    pretty (Forall x f) = text "∀" |+| text x |+| dot |+| pform (f $ "\'"++x)
-    pretty (Exists x f) = text "∃" |+| text x |+| dot |+| pform (f $ "\'"++x)
+    pretty (Forall x f) = text "∀" |+| text x |++| pform (f $ "\'"++x)
+    pretty (Exists x f) = text "∃" |+| text x |++| pform (f $ "\'"++x)
 
 pform (Atom x ts)  = pretty $ Atom x ts
 pform (Neg a)      = pretty $ Neg a
 pform (Forall x f) = pretty $ Forall x f
-pform (Exists x f) = pretty $ Forall x f
+pform (Exists x f) = pretty $ Exists x f
 pform a            = parens $ pretty a
 
 public export
@@ -74,3 +87,28 @@ Pretty Tableau where
     pretty (Branch x y) = indent 2 (pretty x |$| pretty y)
     pretty (End True)   = empty
     pretty (End False)  = text "×" |$| empty
+
+
+termVars : Term -> List Name
+termsVars : List Term -> List Name
+
+termVars (Var "")   = []
+termVars (Var x)    = [x]
+termVars (Fun _ ts) = termsVars ts
+
+termsVars []      = []
+termsVars (t::ts) = termVars t ++ termsVars ts
+
+formVars : Form -> List Name
+formVars (Atom _ ts)  = termsVars ts
+formVars (Neg a)      = formVars a
+formVars (Conj a b)   = formVars a ++ formVars b
+formVars (Disj a b)   = formVars a ++ formVars b
+formVars (Impl a b)   = formVars a ++ formVars b
+formVars (Equi a b)   = formVars a ++ formVars b
+formVars (Forall _ f) = formVars $ f ""
+formVars (Exists _ f) = formVars $ f ""
+
+export
+vars : List Form -> List Name
+vars = nub . concatMap formVars
