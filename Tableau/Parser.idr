@@ -60,7 +60,7 @@ form : FormParser n Form
 
 quant cons ns = do
     x <- var
-    f <- form (x::ns)
+    f <- fact (x::ns)
     pure $ \vs => cons x $ \v => f (v::vs)
 
 fact ns = (token "forall" *> quant Forall ns)

@@ -58,8 +58,8 @@ Pretty Form where
     pretty (Disj a b)   = pform a |++| text "∨" |++| pform b
     pretty (Impl a b)   = pform a |++| text "→" |++| pform b
     pretty (Equi a b)   = pform a |++| text "↔" |++| pform b
-    pretty (Forall x f) = text "∀" |+| text x |++| pform (f $ "\'"++x)
-    pretty (Exists x f) = text "∃" |+| text x |++| pform (f $ "\'"++x)
+    pretty (Forall x f) = text "∀" |+| text x |+| pform (f $ "\'"++x)
+    pretty (Exists x f) = text "∃" |+| text x |+| pform (f $ "\'"++x)
 
 pform (Atom x ts)  = pretty $ Atom x ts
 pform (Neg a)      = pretty $ Neg a
