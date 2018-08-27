@@ -34,7 +34,7 @@ Eq Term where
 
 eqs []      []      = True
 eqs []      _       = False
-eqs _       []       = False
+eqs _       []      = False
 eqs (x::xs) (y::ys) = x == y && eqs xs ys
 
 pform : Form -> Doc
