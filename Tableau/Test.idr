@@ -33,6 +33,7 @@ vailedInputs = [ "A / A | B"
                , "A, ~A / B"
                , "B -> ~A, ~B -> C / A -> C"
                , "A <-> B / A -> B"
+
                , "~F(a) | exists x F(x), exists x F(x) -> P / F(a) -> P"
                , "T(c,b) -> forall x T(x, b), ~T(a,b) / ~T(c, b)"
                , "forall x M(x) / ~exists x ~ M(x)"
@@ -40,6 +41,14 @@ vailedInputs = [ "A / A | B"
                , "forall x (P(x) -> Q(x)), P(a) / Q(a)"
                , "forall x (F(x) -> G(x)), forall x F(x) / G(a)"
                , "forall x (F(x) -> G(x)), forall x (G(x) -> H(x)) / forall x (F(x) -> H(x))"
+
+               , "forall x forall y ((P(x) & x = y) -> P(y))"
+               -- , "M(a) | M(b), ~M(a) / ~(a = b)"
+               , "a = b / b = a"
+               , "a = b / P(a) -> P(b)"
+               , "forall x (x = x)"
+               , "forall x forall y (x = y -> y = x)"
+               , "forall x forall y forall z (x = y & y = z -> x = z)"
                ]
 
 export
