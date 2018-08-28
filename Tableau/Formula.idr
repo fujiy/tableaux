@@ -23,6 +23,7 @@ data Form = Atom Name (List Term)
           | Equi Form Form
           | Forall Name (Name -> Form)
           | Exists Name (Name -> Form)
+          | Equal Term Term
 
 eqs : List Term -> List Term -> Bool
 
@@ -58,8 +59,9 @@ Pretty Form where
     pretty (Disj a b)   = pform a |++| text "∨" |++| pform b
     pretty (Impl a b)   = pform a |++| text "→" |++| pform b
     pretty (Equi a b)   = pform a |++| text "↔" |++| pform b
-    pretty (Forall x f) = text "∀" |+| text x |+| pform (f $ "\'"++x)
-    pretty (Exists x f) = text "∃" |+| text x |+| pform (f $ "\'"++x)
+    pretty (Forall x f) = text "∀" |+| text x |+| pform (f x)
+    pretty (Exists x f) = text "∃" |+| text x |+| pform (f x)
+    pretty (Equal a b)  = pretty a |++| text "=" |++| pretty b
 
 pform (Atom x ts)  = pretty $ Atom x ts
 pform (Neg a)      = pretty $ Neg a
@@ -108,6 +110,7 @@ formVars (Impl a b)   = formVars a ++ formVars b
 formVars (Equi a b)   = formVars a ++ formVars b
 formVars (Forall _ f) = formVars $ f ""
 formVars (Exists _ f) = formVars $ f ""
+formVars (Equal a b)  = termVars a ++ termVars b
 
 export
 vars : List Form -> List Name

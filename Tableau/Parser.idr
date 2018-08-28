@@ -44,10 +44,11 @@ term   : FormParser n Term
 terms  : FormParser n (List Term)
 terms' : FormParser n (List Term)
 
-term ns = [| (variable ns) var |]
-     <|>| [| (lift2 Fun) (const <$> var) (terms ns) |]
+term ns = [| (lift2 Fun) (const <$> var) (terms ns) |]
+     <|>| [| (variable ns) var |]
 
-terms  ns = (\xs, ns' => map (flip id ns') xs) <$> parens (commaSep $ term ns)
+terms  ns = (\xs, ns' => map (flip id ns') xs)
+       <$> (token "(" *>| (commaSep $ term ns) <* token ")")
 terms' ns = terms ns <|> pure (const [])
 
 quant : (Name -> (Name -> Form) -> Form) -> FormParser n Form
@@ -66,6 +67,7 @@ quant cons ns = do
 fact ns = (token "forall" *> quant Forall ns)
      <|>| (token "exists" *> quant Exists ns)
      <|>| parens (form ns)
+     <|>| [| (lift2 Equal) (term ns <* token "=") (term ns) |]
      <|>| [| (lift1 Neg) (token "~" *> fact ns) |]
      <|>| [| (lift2 Atom) (const <$> atom) (terms' ns) |]
 conj ns = chainl1 (fact ns) (const (lift2 Conj) <$> token "&")
@@ -75,6 +77,7 @@ form ns = chainr1 (impl ns) (const (lift2 Equi) <$> token "<->")
 
 arg : Parser Argument
 arg = [| LA (commaSep $ runFP form) (token "/" *> runFP form) |]
+  <|> [| (LA []) (runFP form) |]
 
 export
 parse : String -> Either String Argument
