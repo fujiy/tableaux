@@ -3,8 +3,9 @@ module Tableau.Formula
 
 import Text.PrettyPrint.Leijen
 import Text.PrettyPrint.Leijen.Class
+import Text.PrettyPrint.Boxes
 
-%default total
+-- %default total
 
 public export
 Name : Type
@@ -83,13 +84,17 @@ data Tableau = Follow Form Tableau
              | Branch Tableau Tableau
              | End Bool
 
-export
-Pretty Tableau where
-    pretty (Follow f t) = pretty f |$| pretty t
-    pretty (Branch x y) = indent 2 (pretty x |$| pretty y)
-    pretty (End True)   = empty
-    pretty (End False)  = text "×" |$| empty
+tableauBox : Tableau -> Box
+tableauBox t = assert_total $ alignb Center $ case t of
+    Follow f t => alignb Center (docb $ pretty f) ||$| tableauBox t
+    Branch l r => alignb Center (textb " /" ||$| tableauBox l)
+             ||+| blank 0 3
+             ||+| alignb Center (textb "\\ " ||$| tableauBox r)
+    End True   => blank 0 0
+    End False  => textb "×"
 
+export Pretty Tableau where
+    pretty = pretty . tableauBox
 
 termVars : Term -> List Name
 termsVars : List Term -> List Name

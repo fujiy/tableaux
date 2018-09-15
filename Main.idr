@@ -15,6 +15,6 @@ main : IO ()
 main = repl "> " $ \s => fromEither	$ do
     la <- alter (parse s) (Left "parse error.\n")
     let (t, r) = prove la
-    pure $ displayS (renderPretty 1.0 80 $ pretty la) "\n\n"
-        ++ displayS (renderPretty 1.0 80 $ pretty $ t) "\n"
+    pure $ show (pretty la) ++ "\n\n"
+        ++ show (pretty t)  ++ "\n"
         ++ if r then "true\n" else "false\n"
