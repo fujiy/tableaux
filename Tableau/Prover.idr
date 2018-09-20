@@ -40,88 +40,91 @@ equals _   []      _       = False
 equals _   _       []      = False
 equals eqs (a::as) (b::bs) = equal eqs a b && equals eqs as bs
 
-inst : List Name -> List (Term, Term) -> List (Name, List Term) -> List (Name, List Term) -> List (Name -> Form) -> (Tableau, Bool)
-step : List Name -> List (Term, Term) -> List (Name, List Term) -> List (Name, List Term) -> List (Name -> Form) -> List Form -> (Tableau, Bool)
+inst : Nat -> List Name -> List (Term, Term) -> List (Name, List Term) -> List (Name, List Term) -> List (Name -> Form) -> (Tableau, Bool)
+step : Nat -> List Name -> List (Term, Term) -> List (Name, List Term) -> List (Name, List Term) -> List (Name -> Form) -> List Form -> (Tableau, Bool)
 
-inst ns eqs ts fs []  = (End True, True)
-inst ns eqs ts fs uqs = let is     = uqs <*> (defaultList "a" ns)
-                            (t, r) = step ns eqs ts fs [] is
-                        in  (foldr Follow t is, r)
+inst Z   _  _   _  _  _   = (End True, True)
+inst lim ns eqs ts fs []  = (End True, True)
+inst lim ns eqs ts fs uqs = let ns'    = if isNil ns then ["a"] else ns
+                                is     = uqs <*> ns'
+                                (t, r) = step (minus lim (S Z)) ns' eqs ts fs [] is
+                            in  (foldr Follow t is, r)
 
 
-step ns eqs ts fs uqs [] = inst ns eqs ts fs uqs
-step ns eqs ts fs uqs (f::l) = case f of
+step Z   _  _   _  _  _   _  = (End True, True)
+step lim ns eqs ts fs uqs [] = inst lim ns eqs ts fs uqs
+step lim ns eqs ts fs uqs (f::l) = let lim' = minus lim (S Z) in case f of
     Atom x xs =>
         if elemBy (\(x, xs), (y, ys) => x == y && equals eqs xs ys) (x, xs) fs
         then (End False, False)
-        else step ns eqs ((x, xs)::ts) fs uqs l
+        else step lim' ns eqs ((x, xs)::ts) fs uqs l
     Neg (Atom x xs) =>
         if elemBy (\(x, xs), (y, ys) => x == y && equals eqs xs ys) (x, xs) ts
         then (End False, False)
-        else step ns eqs ts ((x, xs)::fs) uqs l
+        else step lim' ns eqs ts ((x, xs)::fs) uqs l
     Neg (Neg a) =>
-        let (t, r) = step ns eqs ts fs uqs (a::l)
+        let (t, r) = step lim' ns eqs ts fs uqs (a::l)
         in  (Follow a t, r)
     Conj a b =>
-        let (t, r) = step ns eqs ts fs uqs (a::b::l)
+        let (t, r) = step lim' ns eqs ts fs uqs (a::b::l)
         in  (Follow a (Follow b t), r)
     Neg (Conj a b) =>
-        let (ta, ra) = step ns eqs ts fs uqs (Neg a::l)
-            (tb, rb) = step ns eqs ts fs uqs (Neg b::l)
+        let (ta, ra) = step lim' ns eqs ts fs uqs (Neg a::l)
+            (tb, rb) = step lim' ns eqs ts fs uqs (Neg b::l)
         in  (Branch (Follow (Neg a) ta)
                     (Follow (Neg b) tb),
              ra || rb)
     Disj a b =>
-        let (ta, ra) = step ns eqs ts fs uqs (a::l)
-            (tb, rb) = step ns eqs ts fs uqs (b::l)
+        let (ta, ra) = step lim' ns eqs ts fs uqs (a::l)
+            (tb, rb) = step lim' ns eqs ts fs uqs (b::l)
         in  (Branch (Follow a ta)
                     (Follow b tb),
              ra || rb)
     Neg (Disj a b) =>
-        let (t, r) = step ns eqs ts fs uqs (Neg a::Neg b::l)
+        let (t, r) = step lim' ns eqs ts fs uqs (Neg a::Neg b::l)
         in  (Follow (Neg a) (Follow (Neg b) t), r)
     Impl a b =>
-        let (ta, ra) = step ns eqs ts fs uqs (Neg a::l)
-            (tb, rb) = step ns eqs ts fs uqs (b::l)
+        let (ta, ra) = step lim' ns eqs ts fs uqs (Neg a::l)
+            (tb, rb) = step lim' ns eqs ts fs uqs (b::l)
         in  (Branch (Follow (Neg a) ta)
                     (Follow b tb),
              ra || rb)
     Neg (Impl a b) =>
-        let (t, r) = step ns eqs ts fs uqs (a::Neg b::l)
+        let (t, r) = step lim' ns eqs ts fs uqs (a::Neg b::l)
         in  (Follow a (Follow (Neg b) t), r)
     Equi a b =>
-        let (tx, rx) = step ns eqs ts fs uqs (a::b::l)
-            (ty, ry) = step ns eqs ts fs uqs (Neg a::Neg b::l)
+        let (tx, rx) = step lim' ns eqs ts fs uqs (a::b::l)
+            (ty, ry) = step lim' ns eqs ts fs uqs (Neg a::Neg b::l)
         in  (Branch (Follow a       (Follow b       tx))
                     (Follow (Neg a) (Follow (Neg b) ty)),
              rx || ry)
     Neg (Equi a b) =>
-        let (tx, rx) = step ns eqs ts fs uqs (a::Neg b::l)
-            (ty, ry) = step ns eqs ts fs uqs (Neg a::b::l)
+        let (tx, rx) = step lim' ns eqs ts fs uqs (a::Neg b::l)
+            (ty, ry) = step lim' ns eqs ts fs uqs (Neg a::b::l)
         in  (Branch (Follow a       (Follow (Neg b) tx))
                     (Follow (Neg a) (Follow b       ty)),
              rx || ry)
     Forall _ gen =>
-        step ns eqs ts fs (gen::uqs) l
+        step lim' ns eqs ts fs (gen::uqs) l
     Neg (Forall x gen) =>
         let n      = new ns
-            (t, r) = step (n::ns) eqs ts fs uqs (Neg (gen n)::l)
+            (t, r) = step lim' (n::ns) eqs ts fs uqs (Neg (gen n)::l)
         in  (Follow (Neg (gen n)) t, r)
     Exists _ gen =>
         let n      = new ns
-            (t, r) = step (n::ns) eqs ts fs uqs (gen n::l)
+            (t, r) = step lim' (n::ns) eqs ts fs uqs (gen n::l)
         in  (Follow (gen n) t, r)
     Neg (Exists _ gen) =>
-        step ns eqs ts fs (Neg . gen ::uqs) l
+        step lim' ns eqs ts fs (Neg . gen ::uqs) l
     Equal a b =>
-        step ns ((a, b)::eqs) ts fs uqs l
+        step lim' ns ((a, b)::eqs) ts fs uqs l
     Neg (Equal a b) =>
         if equal eqs a b
         then (End False, False)
-        else step ns eqs ts fs uqs l
+        else step lim' ns eqs ts fs uqs l
 
 export
 prove : Argument -> (Tableau, Bool)
 prove (LA ps c) = let ini    = ps ++ [Neg c]
-                      (t, r) = step (vars ini) [] [] [] [] ini
+                      (t, r) = step 50 (vars ini) [] [] [] [] ini
                   in  (foldr Follow t ini, not r)
