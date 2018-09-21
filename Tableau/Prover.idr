@@ -4,6 +4,34 @@ module Tableau.Prover
 
 import Tableau.Formula
 
+record Prover (a : Type) where
+    constructor P
+    runProver : Nat -> a -> a
+
+return : a -> Prover a
+return a = P $ \_, _ => a
+
+call : Prover a -> Prover a
+call p = P $ \lim, default =>
+    if lim == 0 then default
+                else runProver p (minus lim 1) default
+
+mapP : Prover a -> (a -> a) -> Prover a
+mapP p f = P $ \lim, default =>
+    f $ runProver p lim default
+
+app : Prover a -> Prover a -> (a -> a -> a) -> Prover a
+app pa pb f = P $ \lim, default =>
+    f (runProver pa lim default) (runProver pb lim default)
+
+record ProveState where
+    constructor MkPS
+    names      : List Name
+    equalities : List (Term, Term)
+    trueAtoms  : List (Name, List Term)
+    falseAtoms : List (Name, List Term)
+    univQuants : List (Name -> Form)
+
 new : List Name -> Name
 new = try 'a'
     where
@@ -13,16 +41,12 @@ new = try 'a'
             then try (succ c) ns
             else singleton c
 
-defaultList : a -> List a -> List a
-defaultList a [] = [a]
-defaultList _ as = as
-
 equal  : List (Term, Term) -> Term -> Term -> Bool
 equals : List (Term, Term) -> List Term -> List Term -> Bool
 
 equal eqs a b
     = case (a, b) of
-        (Var x, Var y)       => x == y
+        (Var x,    Var y)    => x == y
         (Fun x xs, Fun y ys) => equal eqs (Var x) (Var y)
                              && equals eqs xs ys
         _ => False
@@ -40,91 +64,113 @@ equals _   []      _       = False
 equals _   _       []      = False
 equals eqs (a::as) (b::bs) = equal eqs a b && equals eqs as bs
 
-inst : Nat -> List Name -> List (Term, Term) -> List (Name, List Term) -> List (Name, List Term) -> List (Name -> Form) -> (Tableau, Bool)
-step : Nat -> List Name -> List (Term, Term) -> List (Name, List Term) -> List (Name, List Term) -> List (Name -> Form) -> List Form -> (Tableau, Bool)
+inst : ProveState -> Prover (Tableau, Bool)
+step : ProveState -> List Form -> Prover (Tableau, Bool)
 
-inst Z   _  _   _  _  _   = (End True, True)
-inst lim ns eqs ts fs []  = (End True, True)
-inst lim ns eqs ts fs uqs = let ns'    = if isNil ns then ["a"] else ns
-                                is     = uqs <*> ns'
-                                (t, r) = step (minus lim (S Z)) ns' eqs ts fs [] is
-                            in  (foldr Follow t is, r)
+inst ps with (univQuants ps)
+    | [] = return (End True, True)
+    | us = let ns' = if isNil (names ps) then ["a"] else names ps
+               is   = us <*> ns'
+           in  mapP (step (record { names = ns' } ps) is)
+                $ \(t, r) => (foldr Follow t is, r)
 
-
-step Z   _  _   _  _  _   _  = (End True, True)
-step lim ns eqs ts fs uqs [] = inst lim ns eqs ts fs uqs
-step lim ns eqs ts fs uqs (f::l) = let lim' = minus lim (S Z) in case f of
+step ps [] = inst ps
+step ps (f::l) = call $ case f of
     Atom x xs =>
-        if elemBy (\(x, xs), (y, ys) => x == y && equals eqs xs ys) (x, xs) fs
-        then (End False, False)
-        else step lim' ns eqs ((x, xs)::ts) fs uqs l
+        if elemBy (\(x, xs), (y, ys) => x == y
+                                     && equals (equalities ps) xs ys)
+                  (x, xs) (falseAtoms ps)
+        then return (End False, False)
+        else step (record { trueAtoms = (x, xs) :: trueAtoms ps } ps) l
+
     Neg (Atom x xs) =>
-        if elemBy (\(x, xs), (y, ys) => x == y && equals eqs xs ys) (x, xs) ts
-        then (End False, False)
-        else step lim' ns eqs ts ((x, xs)::fs) uqs l
+        if elemBy (\(x, xs), (y, ys) => x == y
+                                     && equals (equalities ps) xs ys)
+                  (x, xs) (trueAtoms ps)
+        then return (End False, False)
+        else step (record { falseAtoms = (x, xs) :: falseAtoms ps } ps) l
+
     Neg (Neg a) =>
-        let (t, r) = step lim' ns eqs ts fs uqs (a::l)
-        in  (Follow a t, r)
+        mapP (step ps $ a::l)
+        $ \(t, r) => (Follow a t, r)
+
     Conj a b =>
-        let (t, r) = step lim' ns eqs ts fs uqs (a::b::l)
-        in  (Follow a (Follow b t), r)
+        mapP (step ps $ a::b::l)
+        $ \(t, r) => (Follow a (Follow b t), r)
+
     Neg (Conj a b) =>
-        let (ta, ra) = step lim' ns eqs ts fs uqs (Neg a::l)
-            (tb, rb) = step lim' ns eqs ts fs uqs (Neg b::l)
-        in  (Branch (Follow (Neg a) ta)
+        app (step ps $ Neg a::l)
+            (step ps $ Neg b::l)
+        $ \(ta, ra), (tb, rb) =>
+            (Branch (Follow (Neg a) ta)
                     (Follow (Neg b) tb),
              ra || rb)
+
     Disj a b =>
-        let (ta, ra) = step lim' ns eqs ts fs uqs (a::l)
-            (tb, rb) = step lim' ns eqs ts fs uqs (b::l)
-        in  (Branch (Follow a ta)
+        app (step ps $ a::l)
+            (step ps $ b::l)
+        $ \(ta, ra), (tb, rb) =>
+            (Branch (Follow a ta)
                     (Follow b tb),
              ra || rb)
+
     Neg (Disj a b) =>
-        let (t, r) = step lim' ns eqs ts fs uqs (Neg a::Neg b::l)
-        in  (Follow (Neg a) (Follow (Neg b) t), r)
+        mapP (step ps $ Neg a::Neg b::l)
+        $ \(t, r) => (Follow (Neg a) (Follow (Neg b) t), r)
+
     Impl a b =>
-        let (ta, ra) = step lim' ns eqs ts fs uqs (Neg a::l)
-            (tb, rb) = step lim' ns eqs ts fs uqs (b::l)
-        in  (Branch (Follow (Neg a) ta)
+        app (step ps $ Neg a::l)
+            (step ps $ b::l)
+        $ \(ta, ra), (tb, rb) =>
+            (Branch (Follow (Neg a) ta)
                     (Follow b tb),
              ra || rb)
+
     Neg (Impl a b) =>
-        let (t, r) = step lim' ns eqs ts fs uqs (a::Neg b::l)
-        in  (Follow a (Follow (Neg b) t), r)
+        mapP (step ps $ a::Neg b::l)
+        $ \(t, r) => (Follow a (Follow (Neg b) t), r)
+
     Equi a b =>
-        let (tx, rx) = step lim' ns eqs ts fs uqs (a::b::l)
-            (ty, ry) = step lim' ns eqs ts fs uqs (Neg a::Neg b::l)
-        in  (Branch (Follow a       (Follow b       tx))
-                    (Follow (Neg a) (Follow (Neg b) ty)),
-             rx || ry)
-    Neg (Equi a b) =>
-        let (tx, rx) = step lim' ns eqs ts fs uqs (a::Neg b::l)
-            (ty, ry) = step lim' ns eqs ts fs uqs (Neg a::b::l)
-        in  (Branch (Follow a       (Follow (Neg b) tx))
-                    (Follow (Neg a) (Follow b       ty)),
-             rx || ry)
+        app (step ps $ a::b::l)
+            (step ps $ Neg a::Neg b::l)
+        $ \(ta, ra), (tb, rb) =>
+            (Branch (Follow a       (Follow b       ta))
+                    (Follow (Neg a) (Follow (Neg b) tb)),
+             ra || rb)
+
+    Equi a b =>
+        app (step ps $ a::Neg b::l)
+            (step ps $ Neg a::b::l)
+        $ \(ta, ra), (tb, rb) =>
+            (Branch (Follow a       (Follow (Neg b) ta))
+                    (Follow (Neg a) (Follow b       tb)),
+             ra || rb)
+
     Forall _ gen =>
-        step lim' ns eqs ts fs (gen::uqs) l
+        step (record { univQuants = gen::univQuants ps} ps) l
+
     Neg (Forall x gen) =>
-        let n      = new ns
-            (t, r) = step lim' (n::ns) eqs ts fs uqs (Neg (gen n)::l)
-        in  (Follow (Neg (gen n)) t, r)
+        step ps $ Exists x (Neg . gen)::l
+
     Exists _ gen =>
-        let n      = new ns
-            (t, r) = step lim' (n::ns) eqs ts fs uqs (gen n::l)
-        in  (Follow (gen n) t, r)
-    Neg (Exists _ gen) =>
-        step lim' ns eqs ts fs (Neg . gen ::uqs) l
+        let n = new $ names ps
+        in  mapP (step (record { names = n::names ps } ps) $ gen n::l)
+            $ \(t, r) => (Follow (gen n) t, r)
+
+    Neg (Exists x gen) =>
+        step ps $ Forall x (Neg . gen)::l
+
     Equal a b =>
-        step lim' ns ((a, b)::eqs) ts fs uqs l
+        step (record { equalities = (a, b)::equalities ps } ps) l
+
     Neg (Equal a b) =>
-        if equal eqs a b
-        then (End False, False)
-        else step lim' ns eqs ts fs uqs l
+        if equal (equalities ps) a b
+        then return (End False, False)
+        else step ps l
 
 export
 prove : Argument -> (Tableau, Bool)
-prove (LA ps c) = let ini    = ps ++ [Neg c]
-                      (t, r) = step 50 (vars ini) [] [] [] [] ini
-                  in  (foldr Follow t ini, not r)
+prove (LA ps c) =
+    let ini    = ps ++ [Neg c]
+        (t, r) = runProver (step (MkPS (vars ini) [] [] [] []) ini) 50 (End True, True)
+    in  (foldr Follow t ini, not r)

@@ -96,6 +96,13 @@ tableauBox t = assert_total $ alignb Center $ case t of
 export Pretty Tableau where
     pretty = pretty . tableauBox
 
+-- export
+-- Pretty Tableau where
+--     pretty (Follow f t) = pretty f |$| pretty t
+--     pretty (Branch x y) = indent 2 (pretty x |$| pretty y)
+--     pretty (End True)   = empty
+--     pretty (End False)  = text "×" |$| empty
+
 termVars : Term -> List Name
 termsVars : List Term -> List Name
 
