@@ -27,6 +27,8 @@ assert input result = do
 vailedInputs : List String
 vailedInputs = [ "A / A | B"
                , "A & B / A"
+               , "A / A ∨ B"
+               , "A ∧ B / A"
                , "A | B, ~A / B"
                , "A -> B, A / B"
                , "A | B, A -> C, B -> C / C"
@@ -49,6 +51,7 @@ vailedInputs = [ "A / A | B"
                , "forall x (x = x)"
                , "forall x forall y (x = y -> y = x)"
                , "forall x forall y forall z (x = y & y = z -> x = z)"
+               -- , "forall x exists y forall z (M(y,x) & (M(z,x) -> z = y)) , forall x forall y (exists z (M(z,y) | M(x,z)) -> G(x,y)) | forall x exists y G(y,x)"
                ]
 
 export

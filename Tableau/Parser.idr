@@ -28,6 +28,8 @@ lift1 = (.)
 lift2 : (a -> b -> c) -> (d -> a) -> (d -> b) -> (d -> c)
 lift2 f g h d = f (g d) (h d)
 
+sign : List String -> Parser ()
+sign = foldr (\s, p => skip (token s) <|>| p) (fail "empty list")
 
 var : Parser Name
 var = pack <$> lexeme (some lower)
@@ -64,16 +66,16 @@ quant cons ns = do
     f <- fact (x::ns)
     pure $ \vs => cons x $ \v => f (v::vs)
 
-fact ns = (token "forall" *> quant Forall ns)
-     <|>| (token "exists" *> quant Exists ns)
+fact ns = (sign ["forall", "∀"] *> quant Forall ns)
+     <|>| (sign ["exists", "∃"] *> quant Exists ns)
      <|>| parens (form ns)
      <|>| [| (lift2 Equal) (term ns <* token "=") (term ns) |]
-     <|>| [| (lift1 Neg) (token "~" *> fact ns) |]
+     <|>| [| (lift1 Neg)  (sign ["~", "¬"] *> fact ns) |]
      <|>| [| (lift2 Atom) (const <$> atom) (terms' ns) |]
-conj ns = chainl1 (fact ns) (const (lift2 Conj) <$> token "&")
-disj ns = chainl1 (conj ns) (const (lift2 Disj) <$> token "|")
-impl ns = chainr1 (disj ns) (const (lift2 Impl) <$> token "->")
-form ns = chainr1 (impl ns) (const (lift2 Equi) <$> token "<->")
+conj ns = chainl1 (fact ns) (const (lift2 Conj) <$> sign ["&", "∧"])
+disj ns = chainl1 (conj ns) (const (lift2 Disj) <$> sign ["|", "∨"])
+impl ns = chainr1 (disj ns) (const (lift2 Impl) <$> sign ["->", "→"])
+form ns = chainr1 (impl ns) (const (lift2 Equi) <$> sign ["<->", "↔"])
 
 arg : Parser Argument
 arg = [| LA (commaSep $ runFP form) (token "/" *> runFP form) |]
