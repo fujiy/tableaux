@@ -30,7 +30,6 @@ record ProveState where
     equalities : List (Term, Term)
     trueAtoms  : List (Name, List Term)
     falseAtoms : List (Name, List Term)
-    univQuants : List (Name -> Form)
 
 new : List Name -> Name
 new = try 'a'
@@ -64,113 +63,176 @@ equals _   []      _       = False
 equals _   _       []      = False
 equals eqs (a::as) (b::bs) = equal eqs a b && equals eqs as bs
 
-inst : ProveState -> Prover (Tableau, Bool)
-step : ProveState -> List Form -> Prover (Tableau, Bool)
 
-inst ps with (univQuants ps)
-    | [] = return (End True, True)
-    | us = let ns' = if isNil (names ps) then ["a"] else names ps
-               is   = us <*> ns'
-           in  mapP (step (record { names = ns' } ps) is)
-                $ \(t, r) => (foldr Follow t is, r)
+just : Form -> (List Name, Form)
+just f = ([], f)
 
-step ps [] = inst ps
-step ps (f::l) = call $ case f of
+justs : List Form -> List (List Name, Form)
+justs = map just
+
+step : ProveState -> (List Name, Form) -> List (List Name, Form) -> Prover (Tableau, Bool)
+
+priority : ProveState -> (List Name, Form) -> Int
+
+ordP : ProveState -> (List Name, Form) -> (List Name, Form) -> Ordering
+ordP ps a b = compare (priority ps b) (priority ps a)
+
+next : ProveState -> List (List Name, Form) -> List (List Name, Form) -> Prover (Tableau, Bool)
+next ps fs news with (mergeBy (ordP ps) fs $ sortBy (ordP ps) news)
+    | []     = return (End True, True)
+    | (f::l) = if priority ps f >= 0 then step ps f l
+                                     else return (End True, True)
+
+names' : ProveState -> List Name
+names' ps = if isNil (names ps) then ["a"] else names ps
+
+
+DEFORM  : Int
+ATOM    : Int
+EXINST  : Int
+UNIINST : Int
+CONJ    : Int
+DISJ    : Int
+NONEQ   : Int
+NONE    : Int
+DEFORM  = 15
+ATOM    = 10
+EXINST  = 9
+CONJ    = 7
+UNIINST = 5
+DISJ    = 3
+NONEQ   = 2
+NONE    = -1
+
+-- priority _ = 0
+priority ps (qns, f) = case f of
+    Atom x xs          => ATOM
+    Neg (Atom x xs)    => ATOM
+    Neg (Neg a)        => DEFORM
+    Conj a b           => CONJ
+    Neg (Conj a b)     => DISJ
+    Disj a b           => DISJ
+    Neg (Disj a b)     => CONJ
+    Impl a b           => DISJ
+    Neg (Impl a b)     => CONJ
+    Equi a b           => DISJ
+    Neg (Equi a b)     => DISJ
+    Forall _ gen       => if isNil (names' ps \\ qns) then NONE else UNIINST
+    Neg (Forall x gen) => DEFORM
+    Exists _ gen       => EXINST
+    Neg (Exists x gen) => DEFORM
+    Equal a b          => ATOM
+    Neg (Equal a b)    => NONEQ
+
+step ps (qns, f) l = call $ case f of
     Atom x xs =>
         if elemBy (\(x, xs), (y, ys) => x == y
                                      && equals (equalities ps) xs ys)
                   (x, xs) (falseAtoms ps)
         then return (End False, False)
-        else step (record { trueAtoms = (x, xs) :: trueAtoms ps } ps) l
+        else next (record { trueAtoms = (x, xs) :: trueAtoms ps } ps) l []
 
     Neg (Atom x xs) =>
         if elemBy (\(x, xs), (y, ys) => x == y
                                      && equals (equalities ps) xs ys)
                   (x, xs) (trueAtoms ps)
         then return (End False, False)
-        else step (record { falseAtoms = (x, xs) :: falseAtoms ps } ps) l
+        else next (record { falseAtoms = (x, xs) :: falseAtoms ps } ps) l []
 
     Neg (Neg a) =>
-        mapP (step ps $ a::l)
+        mapP (next ps l $ justs [a])
         $ \(t, r) => (Follow a t, r)
 
     Conj a b =>
-        mapP (step ps $ a::b::l)
+        mapP (next ps l $ justs [a, b])
         $ \(t, r) => (Follow a (Follow b t), r)
 
     Neg (Conj a b) =>
-        app (step ps $ Neg a::l)
-            (step ps $ Neg b::l)
+        app (next ps l $ justs [Neg a])
+            (next ps l $ justs [Neg b])
         $ \(ta, ra), (tb, rb) =>
             (Branch (Follow (Neg a) ta)
                     (Follow (Neg b) tb),
              ra || rb)
 
     Disj a b =>
-        app (step ps $ a::l)
-            (step ps $ b::l)
+        app (next ps l $ justs [a])
+            (next ps l $ justs [b])
         $ \(ta, ra), (tb, rb) =>
             (Branch (Follow a ta)
                     (Follow b tb),
              ra || rb)
 
     Neg (Disj a b) =>
-        mapP (step ps $ Neg a::Neg b::l)
+        mapP (next ps l $ justs [Neg a, Neg b])
         $ \(t, r) => (Follow (Neg a) (Follow (Neg b) t), r)
 
     Impl a b =>
-        app (step ps $ Neg a::l)
-            (step ps $ b::l)
+        app (next ps l $ justs [Neg a])
+            (next ps l $ justs [b])
         $ \(ta, ra), (tb, rb) =>
             (Branch (Follow (Neg a) ta)
                     (Follow b tb),
              ra || rb)
 
     Neg (Impl a b) =>
-        mapP (step ps $ a::Neg b::l)
+        mapP (next ps l $ justs [a, Neg b])
         $ \(t, r) => (Follow a (Follow (Neg b) t), r)
 
     Equi a b =>
-        app (step ps $ a::b::l)
-            (step ps $ Neg a::Neg b::l)
+        app (next ps l $ justs [a, b])
+            (next ps l $ justs [Neg a, Neg b])
         $ \(ta, ra), (tb, rb) =>
             (Branch (Follow a       (Follow b       ta))
                     (Follow (Neg a) (Follow (Neg b) tb)),
              ra || rb)
 
-    Equi a b =>
-        app (step ps $ a::Neg b::l)
-            (step ps $ Neg a::b::l)
+    Neg (Equi a b) =>
+        app (next ps l $ justs [a, Neg b])
+            (next ps l $ justs [Neg a, b])
         $ \(ta, ra), (tb, rb) =>
             (Branch (Follow a       (Follow (Neg b) ta))
                     (Follow (Neg a) (Follow b       tb)),
              ra || rb)
 
     Forall _ gen =>
-        step (record { univQuants = gen::univQuants ps} ps) l
+        -- case names' ps \\ qns of
+        --     [] => next ps l []
+        --     n::ns =>
+        --         let i = gen n
+        --         in  mapP (next (record { names = names' ps } ps) l
+        --                 $ (n::qns, f) :: justs [i])
+        --             $ \(t, r) => (Follow i t, r)
+        let ns' = names' ps \\ qns
+            is  = gen <$> ns'
+        in  mapP (next (record { names = names' ps } ps) l
+                $ (ns' ++ qns, f) :: justs is)
+            $ \(t, r) => (foldr Follow t is, r)
 
     Neg (Forall x gen) =>
-        step ps $ Exists x (Neg . gen)::l
+        mapP (next ps l $ justs [Exists x (Neg . gen)])
+        $ \(t, r) => (Follow (Exists x (Neg . gen)) t, r)
 
     Exists _ gen =>
         let n = new $ names ps
-        in  mapP (step (record { names = n::names ps } ps) $ gen n::l)
+        in  mapP (next (record { names = n::names ps } ps) l $ justs [gen n])
             $ \(t, r) => (Follow (gen n) t, r)
 
     Neg (Exists x gen) =>
-        step ps $ Forall x (Neg . gen)::l
+        mapP (next ps l $ justs [Forall x (Neg . gen)])
+        $ \(t, r) => (Follow (Forall x (Neg . gen)) t, r)
 
     Equal a b =>
-        step (record { equalities = (a, b)::equalities ps } ps) l
+        next (record { equalities = (a, b)::equalities ps } ps) l []
 
     Neg (Equal a b) =>
         if equal (equalities ps) a b
         then return (End False, False)
-        else step ps l
+        else next ps l []
 
 export
 prove : Argument -> (Tableau, Bool)
 prove (LA ps c) =
     let ini    = ps ++ [Neg c]
-        (t, r) = runProver (step (MkPS (vars ini) [] [] [] []) ini) 50 (End True, True)
+        (t, r) = runProver (next (MkPS (vars ini) [] [] []) [] $ justs ini) 200 (End True, True)
     in  (foldr Follow t ini, not r)
