@@ -54,7 +54,7 @@ hcatb bs = let h = foldr (max . height) 0 bs
 
 export
 docb : Doc -> Box
-docb = vcatb . map textb . lines . show
+docb = vcatb . map textb . lines . flip displayS "" . renderPretty 1.0 1000
 
 export
 alignb : Alignment -> Box -> Box
