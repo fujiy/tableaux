@@ -83,6 +83,7 @@ public export
 data Tableau = Follow Form Tableau
              | Branch Tableau Tableau
              | End Bool
+             | Limit
 
 tableauBox : Tableau -> Box
 tableauBox t = assert_total $ alignb Center $ case t of
@@ -92,6 +93,7 @@ tableauBox t = assert_total $ alignb Center $ case t of
              ||+| alignb Center (textb "\\ " ||$| tableauBox r)
     End True   => blank 0 0
     End False  => textb "×"
+    Limit      => textb "<<limit>>"
 
 export Pretty Tableau where
     pretty = pretty . tableauBox

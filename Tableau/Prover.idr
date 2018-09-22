@@ -81,7 +81,7 @@ next : ProveState -> List (List Name, Form) -> List (List Name, Form) -> Prover 
 next ps fs news with (mergeBy (ordP ps) fs $ sortBy (ordP ps) news)
     | []     = return (End True, True)
     | (f::l) = if priority ps f >= 0 then step ps f l
-                                     else return (End True, True)
+                                     else next ps l []
 
 names' : ProveState -> List Name
 names' ps = if isNil (names ps) then ["a"] else names ps
@@ -234,5 +234,5 @@ export
 prove : Argument -> (Tableau, Bool)
 prove (LA ps c) =
     let ini    = ps ++ [Neg c]
-        (t, r) = runProver (next (MkPS (vars ini) [] [] []) [] $ justs ini) 200 (End True, True)
+        (t, r) = runProver (next (MkPS (vars ini) [] [] []) [] $ justs ini) 127 (Limit, True)
     in  (foldr Follow t ini, not r)
